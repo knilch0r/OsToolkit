@@ -48,16 +48,13 @@ typedef struct cpuload_s cpuload_t;
 
 struct cpuload_s
 {
-	u64_t t_window;					/* Length of a window, in ticks. = t_interval * CL_N_INTERVAL */
 	u64_t t_interval;				/* Length of an interval, in ticks */
 	u64_t t_threshold;				/* Boundary value for decision: busy or idle */
 
 	u64_t t_used;					/* Amount of current interval accounted for. */
 	u64_t t_busy;					/* Amount of current interval that was busy */
-	u32_t rolling[CL_N_INTERVALS];	/* Percent busy in each interval */
-	u32_t rolling_sum;				/* Sum of the rolling array */
-	u32_t rolling_i;				/* Next position in the rolling array */
-	u32_t average;					/* Most recent average. = rolling_sum/CL_N_INTERVAL */
+	u32_t average;					/* Moving average for CL_N_INTERVAL intervals */
+	u32_t average10;				/* Moving average for 10*CL_N_INTERVAL intervals */
 	u32_t peak;						/* Highest average seen */
 };
 

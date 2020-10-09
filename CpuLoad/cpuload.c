@@ -24,26 +24,19 @@
  *
  * This function is called whenever an interval gets filled up.
  * Actions performed:
- * 	- Adjust the rolling sum downwards by the interval that's about to be evicted from the array.
- *  - Calculate the average for the interval and store it, overwriting the average from the evicted interval.
- *	- Add the new average to the rolling sum.
- *	- Increment the rolling index modulo n_intervals
- *	- Set the busy time to zero.
- *	- Calculate a new window average and update the peak hold if necessary.
+ *	- Calculate the moving averages for the interval and store them.
+ *	- Update the peak hold if necessary.
 */
+#define CL_N_10INTERVALS (CL_N_INTERVALS*10U)
 static void calc_rolling(cpuload_t *cl)
 {
-	cl->rolling_sum -= cl->rolling[cl->rolling_i];
-	cl->rolling[cl->rolling_i] = (u32_t)((cl->t_busy * CL_SCALE) / cl->t_interval);
-	cl->rolling_sum += cl->rolling[cl->rolling_i];
-	cl->rolling_i++;
-	if ( cl->rolling_i >= CL_N_INTERVALS )
-		cl->rolling_i = 0;
-	cl->t_busy = 0;
+	u32_t this_interval = (cl->t_busy * CL_SCALE) / cl->t_interval;
 
-	cl->average = cl->rolling_sum / CL_N_INTERVALS;
-	if ( cl->peak < cl->average )
-		cl->peak = cl->average;
+	cl->average = (cl->average * (CL_N_INTERVALS-1U) + this_interval) / CL_N_INTERVALS;
+	cl->average10 = (cl->average10 * (CL_N_10INTERVALS-1U) + this_interval) / CL_N_10INTERVALS;
+
+	if ( cl->peak < this_interval )
+		cl->peak = this_interval;
 
 	cl_Callout(cl);
 }
@@ -72,7 +65,7 @@ static void cl_LogBusy(cpuload_t *cl, u64_t t)
 
 /* cl_LogIdle() - logs some idle time
  *
- * Similar to cl_LogBusy(), but the after the first cal_rolling(), the busy time stays at zero.
+ * Similar to cl_LogBusy(), but the after the first calc_rolling(), the busy time stays at zero.
 */
 static void cl_LogIdle(cpuload_t *cl, u64_t t)
 {
@@ -97,21 +90,14 @@ static void cl_LogIdle(cpuload_t *cl, u64_t t)
 */
 static void cl_Init(cpuload_t *cl)
 {
-	cl->t_window	= (u64_t)CL_INTERVAL * (u64_t)CL_N_INTERVALS;	/* Length of a window, in ticks. */
-	cl->t_interval	= (u64_t)CL_INTERVAL;							/* Length of an interval, in ticks */
-	cl->t_threshold	= (u64_t)CL_THRESHOLD;							/* Boundary value for decision: busy or idle */
+	cl->t_interval	= (u64_t)CL_INTERVAL;		/* Length of an interval, in ticks */
+	cl->t_threshold	= (u64_t)CL_THRESHOLD;		/* Boundary value for decision: busy or idle */
 
 	cl->t_used = 0;			/* Amount of current interval accounted for. */
 	cl->t_busy = 0;			/* Amount of current interval that was busy */
-	cl->rolling_sum = 0;	/* Sum of the rolling array */
-	cl->rolling_i = 0;		/* Next position in the rolling array */
-	cl->average = CL_SCALE;	/* Most recent average. = rolling_sum/CL_N_INTERVAL */
-	cl->peak = 0;			/* Highest average seen */
-
-	for ( int i=0; i<CL_N_INTERVALS; i++ )
-	{
-		cl->rolling[i] = 0;	/* Percent busy in each interval */
-	}
+	cl->average = 0;
+	cl->average10 = 0;
+	cl->peak = 0;			/* Highest interval load seen */
 }
 
 /* cl_IdleLoop() - idle-loop function that calculates CPU load
